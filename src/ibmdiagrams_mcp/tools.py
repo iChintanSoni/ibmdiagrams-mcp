@@ -93,21 +93,18 @@ def get_example(name: str = "") -> str:
     return f"# {ex['description']}\n\n```python\n{ex['code']}\n```"
 
 
-def generate_diagram(code: str, output_dir: str = "/tmp") -> str:
+def generate_diagram(code: str) -> str:
     """Generate an IBM Cloud architecture diagram from Python code.
 
     Executes the provided Python code (which must use the ibmdiagrams library)
-    and returns the path to the generated .drawio file along with the XML content.
+    and returns the drawio XML content directly.
 
     The code should use IBMDiagram (or Diagram) as the top-level context manager.
-    Set output= in IBMDiagram(..., output=output_dir) to control where the file
-    is written, or leave it out — the tool captures the default location.
 
     SECURITY WARNING:
     This function executes arbitrary Python code provided by the user. While it
-    validates the output directory and runs with a timeout, it does NOT sandbox
-    the execution environment. The code runs with the same permissions as the
-    MCP server process and can:
+    runs with a timeout, it does NOT sandbox the execution environment. The code
+    runs with the same permissions as the MCP server process and can:
     - Access the file system
     - Make network requests
     - Execute system commands
@@ -123,13 +120,9 @@ def generate_diagram(code: str, output_dir: str = "/tmp") -> str:
     Args:
         code: Python code using the ibmdiagrams API. Must import and use
               IBMDiagram (or Diagram) as a context manager.
-        output_dir: Directory where the .drawio file should be written.
-                    Defaults to /tmp. Path is validated and resolved to prevent
-                    path traversal attacks.
 
     Returns:
-        On success: "SUCCESS\nFILE:<path>\n\n<xml content>"
-        On failure: "ERROR\n<stderr output>"
+        Raw drawio XML content on success, or error message prefixed with "ERROR\n"
 
     Example code:
         from ibmdiagrams.ibmcloud.diagram import IBMDiagram
@@ -142,18 +135,8 @@ def generate_diagram(code: str, output_dir: str = "/tmp") -> str:
                     with Subnet("subnet-1"):
                         VirtualServer("vsi-1")
     """
-    # Validate and resolve output_dir to prevent path traversal
-    try:
-        output_path = Path(output_dir).resolve()
-        if not output_path.exists():
-            output_path.mkdir(parents=True, exist_ok=True)
-        if not output_path.is_dir():
-            return f"ERROR\noutput_dir '{output_dir}' is not a directory"
-        # Check write permissions
-        if not os.access(output_path, os.W_OK):
-            return f"ERROR\nNo write permission for directory '{output_dir}'"
-    except (OSError, ValueError) as e:
-        return f"ERROR\nInvalid output_dir '{output_dir}': {e}"
+    # Use system temp directory for temporary files
+    output_path = Path(tempfile.gettempdir()).resolve()
 
     script_path = None
     try:
@@ -203,7 +186,15 @@ def generate_diagram(code: str, output_dir: str = "/tmp") -> str:
         # Get the most recently modified file
         latest = max(drawio_files, key=lambda p: p.stat().st_mtime)
         xml_content = latest.read_text(encoding="utf-8")
-        return f"SUCCESS\nFILE:{latest}\n\n{xml_content}"
+
+        # Clean up the generated file
+        try:
+            latest.unlink()
+            logger.debug(f"Cleaned up generated file: {latest}")
+        except OSError as e:
+            logger.warning(f"Failed to clean up generated file {latest}: {e}")
+
+        return xml_content
 
     except subprocess.TimeoutExpired:
         logger.warning(
@@ -402,11 +393,11 @@ def generate_from_terraform(tfstate_content: str, label_type: str = "custom", ou
     Args:
         tfstate_content: Terraform state file content in JSON format
         label_type: Label style - "custom" (detailed) or "general" (simplified). Default: "custom"
-        output_dir: Output directory for the diagram. If empty, uses system temp directory.
+        output_dir: Output directory for temporary files. If empty, uses system temp directory.
 
     Returns:
-        On success: Path to generated .drawio file and summary
-        On failure: Error message with details
+        On success: "SUCCESS\n\n<summary>\n\n<xml content>"
+        On failure: "ERROR\n<error details>"
 
     Example:
         # Get terraform state
@@ -493,8 +484,16 @@ def generate_from_terraform(tfstate_content: str, label_type: str = "custom", ou
         # Read the generated file
         xml_content = expected_file.read_text(encoding="utf-8")
 
+        # Clean up the generated file
+        try:
+            expected_file.unlink()
+            logger.debug(f"Cleaned up generated file: {expected_file}")
+        except OSError as e:
+            logger.warning(
+                f"Failed to clean up generated file {expected_file}: {e}")
+
         # Parse tfstate to provide summary
-        summary_lines = ["SUCCESS", f"FILE:{expected_file}", ""]
+        summary_lines = ["SUCCESS", ""]
         summary_lines.append("## Terraform State Summary")
 
         # Try to extract resource counts
@@ -512,9 +511,9 @@ def generate_from_terraform(tfstate_content: str, label_type: str = "custom", ou
                 summary_lines.append(f"  - {rtype}: {count}")
 
         summary_lines.append(f"\nLabel type: {label_type}")
-        summary_lines.append(f"\nDiagram file: {expected_file}")
 
-        return "\n".join(summary_lines)
+        # Return summary with XML content
+        return "\n".join(summary_lines) + f"\n\n{xml_content}"
 
     except subprocess.TimeoutExpired:
         logger.warning(
@@ -533,8 +532,6 @@ def generate_from_terraform(tfstate_content: str, label_type: str = "custom", ou
             except OSError as e:
                 logger.warning(
                     f"Failed to clean up temporary file {tfstate_path}: {e}")
-
-# Made with Bob
 
 
 def analyze_architecture(code: str) -> str:
@@ -1128,11 +1125,11 @@ def generate_from_json(json_content: str, output_dir: str = "") -> str:
 
     Args:
         json_content: JSON infrastructure specification
-        output_dir: Output directory for the diagram
+        output_dir: Output directory for temporary files
 
     Returns:
-        On success: Path to generated .drawio file and summary
-        On failure: Error message with details
+        On success: "SUCCESS\n\n<summary>\n\n<xml content>"
+        On failure: "ERROR\n<error details>"
 
     Note: This uses the ibmdiagrams JSON loader functionality.
     """
@@ -1211,8 +1208,19 @@ def generate_from_json(json_content: str, output_dir: str = "") -> str:
                     f"stdout: {result.stdout}\nstderr: {result.stderr}"
                 )
 
+        # Read the generated file
+        xml_content = expected_file.read_text(encoding="utf-8")
+
+        # Clean up the generated file
+        try:
+            expected_file.unlink()
+            logger.debug(f"Cleaned up generated file: {expected_file}")
+        except OSError as e:
+            logger.warning(
+                f"Failed to clean up generated file {expected_file}: {e}")
+
         # Parse JSON to provide summary
-        summary_lines = ["SUCCESS", f"FILE:{expected_file}", ""]
+        summary_lines = ["SUCCESS", ""]
         summary_lines.append("## JSON Specification Summary")
 
         # Count resources
@@ -1224,9 +1232,8 @@ def generate_from_json(json_content: str, output_dir: str = "") -> str:
         summary_lines.append(f"Subnets: {subnet_count}")
         summary_lines.append(f"Instances: {instance_count}")
 
-        summary_lines.append(f"\nDiagram file: {expected_file}")
-
-        return "\n".join(summary_lines)
+        # Return summary with XML content
+        return "\n".join(summary_lines) + f"\n\n{xml_content}"
 
     except subprocess.TimeoutExpired:
         logger.warning(

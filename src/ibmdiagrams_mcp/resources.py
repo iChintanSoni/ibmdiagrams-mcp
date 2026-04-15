@@ -225,8 +225,6 @@ Automate diagram generation in your pipeline:
 - draw.io Desktop: https://www.diagrams.net/
 """
 
-# Made with Bob
-
 
 def best_practices_guide() -> str:
     """IBM Cloud architecture best practices guide."""

@@ -80,24 +80,22 @@ def get_example(name: str = "") -> str:
 
 
 @mcp.tool()
-def generate_diagram(code: str, output_dir: str = "/tmp") -> str:
+def generate_diagram(code: str) -> str:
     """Generate an IBM Cloud architecture diagram from Python code.
 
     Executes the provided Python code (which must use the ibmdiagrams library)
-    and returns the path to the generated .drawio file along with the XML content.
+    and returns the drawio XML content directly.
 
     SECURITY WARNING:
     This function executes arbitrary Python code. Use only in trusted environments.
 
     Args:
         code: Python code using the ibmdiagrams API
-        output_dir: Directory for output file (default: /tmp)
 
     Returns:
-        On success: "SUCCESS\nFILE:<path>\n\n<xml content>"
-        On failure: "ERROR\n<stderr output>"
+        Raw drawio XML content on success, or error message prefixed with "ERROR\n"
     """
-    return tools.generate_diagram(code, output_dir)
+    return tools.generate_diagram(code)
 
 
 @mcp.tool()
@@ -146,10 +144,10 @@ def generate_from_terraform(tfstate_content: str, label_type: str = "custom", ou
     Args:
         tfstate_content: Terraform state file content in JSON format
         label_type: Label style - "custom" (detailed) or "general" (simplified)
-        output_dir: Output directory for the diagram
+        output_dir: Output directory for temporary files
 
     Returns:
-        On success: Path to generated .drawio file and summary
+        On success: Summary and drawio XML content
         On failure: Error message with details
     """
     return tools.generate_from_terraform(tfstate_content, label_type, output_dir)
@@ -212,10 +210,10 @@ def generate_from_json(json_content: str, output_dir: str = "") -> str:
 
     Args:
         json_content: JSON infrastructure specification
-        output_dir: Output directory for the diagram
+        output_dir: Output directory for temporary files
 
     Returns:
-        On success: Path to generated .drawio file and summary
+        On success: Summary and drawio XML content
         On failure: Error message with details
     """
     return tools.generate_from_json(json_content, output_dir)
@@ -326,7 +324,19 @@ def optimize_costs(diagram_code: str, budget_constraint: str = "", optimization_
 
 def main() -> None:
     """Run the MCP server."""
-    mcp.run(transport="streamable-http")
+    import os
 
+    # Get configuration from environment variables
+    host = os.getenv("MCP_HOST", "127.0.0.1")
+    port = int(os.getenv("MCP_PORT", "3000"))
 
-# Made with Bob
+    # For streamable-http, we need to use uvicorn to run the Starlette app
+    import uvicorn
+
+    logger.info(f"Starting MCP server with streamable-http on {host}:{port}")
+    uvicorn.run(
+        mcp.streamable_http_app(),
+        host=host,
+        port=port,
+        log_level="info"
+    )

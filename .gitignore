@@ -8,3 +8,13 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Test files
+test_*.py
+
+# Generated diagrams
+*.drawio
+
+# Temporary files
+*.tmp
+.DS_Store

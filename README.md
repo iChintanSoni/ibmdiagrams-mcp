@@ -49,11 +49,45 @@ pip install -e .
 
 ### Running the Server
 
+The server uses `streamable-http` transport and runs as an HTTP server.
+
 ```bash
 ibmdiagrams-mcp
 ```
 
-The server runs using the `streamable-http` transport protocol.
+By default, the server starts on `127.0.0.1:3000`. You can customize this using environment variables:
+
+```bash
+MCP_HOST=0.0.0.0 MCP_PORT=8080 ibmdiagrams-mcp
+```
+
+#### Testing with MCP Inspector
+
+To test with the MCP Inspector, you need to configure it to connect to the HTTP server:
+
+```bash
+# Start the server in one terminal
+ibmdiagrams-mcp
+
+# In another terminal, use the inspector with the HTTP endpoint
+npx @modelcontextprotocol/inspector http://127.0.0.1:3000
+```
+
+#### Connecting from Claude Desktop
+
+Add this configuration to your Claude Desktop config file (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+
+```json
+{
+  "mcpServers": {
+    "ibmdiagrams": {
+      "url": "http://127.0.0.1:3000"
+    }
+  }
+}
+```
+
+Make sure the server is running before starting Claude Desktop.
 
 ### Available Tools (10 Tools)
 
@@ -130,12 +164,14 @@ result = validate_diagram_code(code=code)
 
 #### 5. `generate_diagram` (Generate from Python)
 
-Generate an IBM Cloud architecture diagram from Python code.
+Generate an IBM Cloud architecture diagram from Python code and return the drawio XML content directly.
 
 **Parameters:**
 
 - `code` (required): Python code using the ibmdiagrams API
-- `output_dir` (optional): Directory for output file (default: /tmp)
+- `output_dir` (optional): Directory for temporary files (default: /tmp)
+
+**Returns:** Drawio XML content (no file is created)
 
 **Security Warning:** This tool executes arbitrary Python code. Use only in trusted environments with trusted input. See security considerations below.
 
@@ -147,24 +183,27 @@ from ibmdiagrams.ibmcloud.diagram import IBMDiagram
 from ibmdiagrams.ibmcloud.groups import IBMCloud, VPC, Subnet
 from ibmdiagrams.ibmcloud.compute import VirtualServer
 
-with IBMDiagram(name="My Diagram", output="/tmp"):
+with IBMDiagram(name="My Diagram"):
     with IBMCloud("IBM Cloud"):
         with VPC("my-vpc"):
             with Subnet("subnet-1"):
                 VirtualServer("vsi-1")
 """
-generate_diagram(code=code, output_dir="/tmp")
+result = generate_diagram(code=code)
+# Returns: "SUCCESS\n\n<drawio xml content>"
 ```
 
 #### 6. `generate_from_terraform` (NEW - HIGH PRIORITY)
 
-Generate IBM Cloud diagrams directly from Terraform state files.
+Generate IBM Cloud diagrams directly from Terraform state files and return the drawio XML content.
 
 **Parameters:**
 
 - `tfstate_content` (required): Terraform state file content (JSON format from `terraform show -json`)
 - `label_type` (optional): "custom" (detailed, default) or "general" (simplified)
-- `output_dir` (optional): Output directory (default: system temp)
+- `output_dir` (optional): Directory for temporary files (default: system temp)
+
+**Returns:** Summary and drawio XML content (no file is created)
 
 **Example:**
 
@@ -177,9 +216,9 @@ tfstate = result.stdout
 # Generate diagram
 diagram_result = generate_from_terraform(
     tfstate_content=tfstate,
-    label_type="custom",
-    output_dir="./diagrams"
+    label_type="custom"
 )
+# Returns: "SUCCESS\n\n## Terraform State Summary\n...\n\n<drawio xml content>"
 ```
 
 **Why use this:** Core ibmdiagrams feature - visualize your infrastructure-as-code automatically. Supports VPCs, subnets, virtual servers, load balancers, storage, security groups, and more.
@@ -280,12 +319,14 @@ result = preview_structure(code=code)
 
 #### 10. `generate_from_json` (NEW - JSON to Diagram)
 
-Generate IBM Cloud diagrams from JSON infrastructure specifications.
+Generate IBM Cloud diagrams from JSON infrastructure specifications and return the drawio XML content.
 
 **Parameters:**
 
 - `json_content` (required): JSON infrastructure specification
-- `output_dir` (optional): Output directory (default: system temp)
+- `output_dir` (optional): Directory for temporary files (default: system temp)
+
+**Returns:** Summary and drawio XML content (no file is created)
 
 **JSON Format:**
 
@@ -309,7 +350,8 @@ json_spec = '''
   "instances": [{"name": "web-server", "subnet": "public"}]
 }
 '''
-result = generate_from_json(json_content=json_spec, output_dir="./diagrams")
+result = generate_from_json(json_content=json_spec)
+# Returns: "SUCCESS\n\n## JSON Specification Summary\n...\n\n<drawio xml content>"
 ```
 
 **Why use this:** Programmatic diagram generation from structured data. Useful for automation and integration.

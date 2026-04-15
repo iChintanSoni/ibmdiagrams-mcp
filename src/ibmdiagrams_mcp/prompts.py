@@ -23,13 +23,14 @@ Steps:
 2. Design the hierarchy: IBM Cloud > Region > VPC > Subnet > services.
 3. Write clean Python code using context managers for groups and direct instantiation for nodes.
 4. Use operators (>>, <<, -) for connections between components.
-5. Call generate_diagram(code=<your_code>, output_dir="/tmp") to produce the .drawio file.
+5. Call generate_diagram(code=<your_code>) to generate the diagram and receive XML content.
 
 Remember:
 - Group shapes (VPC, Subnet, etc.) use `with Group(...):` syntax.
 - Node shapes (VirtualServer, LoadBalancer, etc.) are instantiated directly.
 - Always wrap everything in `with IBMDiagram(name="...", output="/tmp"):`
 - Use sublabel="" for CIDR ranges, descriptions, or IDs.
+- The generate_diagram tool returns raw XML content, not a file path.
 """
 
 
@@ -60,8 +61,8 @@ Then provide the JSON content.
 ### 2. Generate Initial Diagram
 Use `generate_from_terraform` tool with:
 - tfstate_content: The JSON content provided
-- label_type: Start with "custom" for detailed view
-- output_dir: Specify or use default
+- label_type: Start with "custom" for detailed view (or "general" for simplified)
+- output_dir: Optional - specify custom temp directory or leave empty for system default
 
 ### 3. Analyze the Architecture
 Review the generated diagram and Terraform resources for:
@@ -162,8 +163,6 @@ Would you like me to:
 Remember: Focus on actionable, specific recommendations that improve security,
 reliability, and cost-effectiveness while following IBM Cloud best practices.
 """
-
-# Made with Bob
 
 
 def enhance_security(existing_code: str) -> str:
